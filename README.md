@@ -96,6 +96,6 @@ SMGPSocket.sendSms('13301171412', '【京东】您的验证码为：123456');
 
 ## Questions & Suggestions
 
-Please open an issue [here](https://github.com/tong3jie/redis-queue-stream/issues).
+Please open an issue [here](https://github.com/tong3jie/node-smgp/issues).
 
 
