@@ -144,7 +144,7 @@ export default class Socket extends EventEmitter {
    * @param command
    * @param body
    */
-  async send(command: keyof IRequestId, body?: IReqBody) {
+  async send(command: keyof IRequestId, body?) {
     if (this.sequenceMap.size > 16) return '下发速度太快！';
     const SequenceID = Utils.getSequenceId();
     const buf = Utils.getBuf({ SequenceID, RequestID: command }, body);
@@ -153,14 +153,10 @@ export default class Socket extends EventEmitter {
 
     //超时后60秒进行重发，总共不超过3次
     const timeoutHandle = setTimeout(() => {
-      if (!this.sequenceMap.has(SequenceID) || this.sequenceMap.get(SequenceID).length <= 3) {
-        this.send(command, body);
-      } else {
-        this.emit('timeout', command, SequenceID, body);
-        this.sequenceMap.delete(SequenceID);
-      }
+      this.popPromise(command, timeoutHandle, body);
     }, this.config.heartbeatTimeout);
-    this.pushPromise(SequenceID, timeoutHandle);
+
+    this.pushPromise(command, timeoutHandle, body);
   }
 
   /**
@@ -168,8 +164,6 @@ export default class Socket extends EventEmitter {
    * @param data
    */
   fetchData(data: { header: IHeader; buffer: Buffer }) {
-    // if (!data) return false;
-
     if (this.bufferCache.length < this.headerLength) return false;
 
     data.header = Utils.ReadHeader(this.bufferCache);
@@ -274,11 +268,23 @@ export default class Socket extends EventEmitter {
    * @param sequenceId 流水号
    * @param deferred
    */
-  pushPromise(sequenceId: number, timeHandle: NodeJS.Timeout) {
-    if (!this.sequenceMap.has(sequenceId)) {
-      this.sequenceMap.set(sequenceId, [timeHandle]);
-    } else if (lodash.isArray(this.sequenceMap.get(sequenceId))) {
-      this.sequenceMap.set(sequenceId, this.sequenceMap.get(sequenceId).concat(timeHandle));
+  pushPromise(command: keyof IRequestId, timeHandle: NodeJS.Timeout, body?: Record<string, number | string>) {
+    let mapkey;
+    switch (RequestIdDes[command]) {
+      case 'Login':
+        mapkey = `${command}#${body.ClientID}`;
+      case 'Submit':
+        mapkey = `${command}#${body.DestTermID}#${body.MsgContent}`;
+      case 'Deliver_Resp':
+        mapkey = `${command}#${body.MsgID}#${body.Status}`;
+      default:
+        mapkey = `${command}`;
+    }
+
+    if (!this.sequenceMap.has(mapkey)) {
+      this.sequenceMap.set(mapkey, [timeHandle]);
+    } else if (lodash.isArray(this.sequenceMap.get(mapkey))) {
+      this.sequenceMap.set(mapkey, this.sequenceMap.get(mapkey).concat(timeHandle));
     }
   }
 
@@ -287,11 +293,27 @@ export default class Socket extends EventEmitter {
    * @param sequenceId 流水号
    * @param deferred
    */
-  popPromise(sequenceId: number) {
-    if (!this.sequenceMap.has(sequenceId)) return;
-    const timeHandle = this.sequenceMap.get(sequenceId).shift();
-    if (lodash.isEmpty(this.sequenceMap.get(sequenceId))) this.sequenceMap.delete(sequenceId);
-    return timeHandle;
+  popPromise(command: keyof IRequestId, timeHandle: NodeJS.Timeout, body?: Record<string, number | string>) {
+    let mapkey;
+    switch (RequestIdDes[command]) {
+      case 'Login':
+        mapkey = `${command}#${body.ClientID}`;
+      case 'Submit':
+        mapkey = `${command}#${body.DestTermID}#${body.MsgContent}`;
+      case 'Deliver_Resp':
+        mapkey = `${command}#${body.MsgID}#${body.Status}`;
+      default:
+        mapkey = `${command}`;
+    }
+
+    if (!this.sequenceMap.has(mapkey) || this.sequenceMap.get(mapkey).length <= 3) {
+      this.send(command, body);
+    } else {
+      process.nextTick(() => {
+        this.sequenceMap.delete(mapkey);
+      });
+      this.emit('timeout', command, mapkey, body);
+    }
   }
 
   sendSms(mobile: string, content: string, extendCode?: string) {
