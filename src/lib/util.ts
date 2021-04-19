@@ -7,13 +7,18 @@ import { Command, RequestIdDes, commandDes } from './comConfig';
 
 export default class Util {
   private sequenceId: number;
+  private longSmsNo: number;
+  public headerLength: number;
 
   constructor() {
     this.sequenceId = 0x00000000;
+    this.longSmsNo = 0;
+    this.headerLength = 12;
   }
 
   getSequenceId(): number {
-    return this.sequenceId >= 0xffffffff ? 1 : this.sequenceId + 1;
+    this.sequenceId >= 0xffffffff ? 1 : this.sequenceId++;
+    return this.sequenceId;
   }
 
   TimeStamp = () => {
@@ -29,7 +34,7 @@ export default class Util {
     buffers.push(Buffer.from(ClientID));
     buffers.push(Buffer.alloc(7, 0));
     buffers.push(Buffer.from(secret));
-    buffers.push(Buffer.from(`0x30${timestamp}`));
+    buffers.push(Buffer.from(timestamp));
     const buffer = Buffer.concat(buffers);
 
     return this.MD5(buffer);
@@ -192,6 +197,14 @@ export default class Util {
       let method = `readUInt${bitLength}${bitLength === 8 ? '' : 'BE'}`;
       return buffer[method](length);
     } else if (field.type === 'string') {
+      if (field.name === 'MsgContent') {
+        const MsgContentBuffer = buffer.slice(length, length + fieldLength);
+        if (MsgContentBuffer[0] === 5 && MsgContentBuffer[1] === 0 && MsgContentBuffer[2] === 3) {
+          body.smsNo = MsgContentBuffer[3];
+          return MsgContentBuffer.swap16().toString('ucs2', 6, MsgContentBuffer.length);
+        }
+        return iconv.decode(MsgContentBuffer, 'GB18030');
+      }
       const value = buffer.toString('ascii', length, length + fieldLength);
       return value.replace(/\0+$/, '');
     } else if (field.type === 'buffer') {
@@ -245,5 +258,10 @@ export default class Util {
         PkNumber: 1, //长短信序号
       };
     }
+  }
+
+  getlongSmsNo() {
+    this.longSmsNo >= 127 ? 1 : this.longSmsNo++;
+    return this.longSmsNo;
   }
 }

@@ -99,7 +99,11 @@ const commandDes = {
     { name: 'DestTermIDCount', type: 'number', length: 1 },
     { name: 'DestTermID', type: 'string', length: 21 },
     { name: 'MsgLength', type: 'number', length: 1 },
-    { name: 'MsgContent', type: 'string', length: (obj: Record<string, any>) => obj.MsgLength.length },
+    {
+      name: 'MsgContent',
+      type: 'string',
+      length: (obj: Record<string, any>) => obj.MsgLength,
+    },
     { name: 'Reserve', type: 'string', length: 8 },
     { name: 'TP_pid', type: 'number', length: 1 },
     { name: 'TP_udhi', type: 'number', length: 1 },
@@ -118,7 +122,7 @@ const commandDes = {
     { name: 'SrcTermID', type: 'string', length: 21 },
     { name: 'DestTermID', type: 'string', length: 21 },
     { name: 'MsgLength', type: 'number', length: 1 },
-    { name: 'MsgContent', type: 'string', length: (obj: Record<string, any>) => obj.MsgLength.length },
+    { name: 'MsgContent', type: 'string', length: (obj: Record<string, any>) => obj.MsgLength },
     { name: 'Reserve', type: 'string', length: 8 },
   ],
   Deliver_Report_Cotent: [

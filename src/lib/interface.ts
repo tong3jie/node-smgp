@@ -101,7 +101,7 @@ export interface ILogin {
 
 export interface ILogin_Resp {
   Status: number;
-  AuthenticatorClient: string;
+  AuthenticatorServer: string;
   ServerVersion: number;
   MsgID?: string;
 }
@@ -124,6 +124,12 @@ export interface ISubmit {
   MsgLength: number;
   MsgContent: string;
   Reserve: string;
+  TP_pid?: number;
+  TP_udhi?: number; //长短信时为1
+  PkTotal?: number; //长短信总条数
+  PkNumber?: number; //长短信序号
+  length?: number;
+  smsNo?: number;
 }
 
 export interface ISubmit_Resp {
@@ -156,4 +162,12 @@ export interface IDeliver_Report_Cotent {
 export interface IDeliver_Resp {
   MsgID: string;
   Status: number;
+}
+
+export interface IServerConf {
+  host: string;
+  port: number;
+  Login: (loginMsg: { header: IHeader; body: ILogin }) => ILogin_Resp;
+  Submit: (submitMsg: { header: IHeader; body: ISubmit }) => ISubmit_Resp;
+  Deliver: (deliverMsg: { header: IHeader; body: IDeliver_Resp }) => void;
 }

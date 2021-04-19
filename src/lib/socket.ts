@@ -29,7 +29,7 @@ export default class Socket extends EventEmitter {
   private contentLimit = 70; //短信内容长度
   constructor(config: IConfig) {
     super();
-    this.config = Object.assign(config, defConfig);
+    this.config = Object.assign(defConfig, config);
     this.host = this.config.host;
     this.port = this.config.port;
     this.clientID = this.config.clientID;
@@ -38,6 +38,7 @@ export default class Socket extends EventEmitter {
     this.isReady = false;
     this.heartbeatAttempts = 0;
     this.headerLength = 12;
+    this.sequenceMap = new Map();
     this.heartbeatMaxAttempts = this.config.heartbeatMaxAttempts ?? 3;
     this.connect(this.host, this.port);
   }
@@ -70,25 +71,22 @@ export default class Socket extends EventEmitter {
    */
   connect(host: string, port: number) {
     socketDebug(`start to create connection`);
-    this.connectSocket(host, port)
-      .then(() => {
-        socketDebug(`${host}:${port} connected`);
-        this.heartbeatAttempts = 0;
-        this.handleHeartbeat();
-        this.isReady = true;
-        const TimeStamp = Utils.TimeStamp();
-        const AuthenticatorClient = Utils.getAuthenticatorClient(this.clientID, this.secret, TimeStamp);
-        this.send(Command.Login, {
-          ClientID: this.clientID,
-          AuthenticatorClient,
-          LoginMode: 2,
-          TimeStamp: `0x${parseInt(TimeStamp).toString(16).toUpperCase()}`,
-          ClientVersion: this.ClientVersion,
-        });
-      })
-      .catch(err => {
-        this.destroySocket();
-      });
+    (async () => {
+      await this.connectSocket(host, port);
+    })();
+    socketDebug(`${host}:${port} connected`);
+    this.heartbeatAttempts = 0;
+    this.handleHeartbeat();
+    this.isReady = true;
+    const TimeStamp = Utils.TimeStamp();
+    const AuthenticatorClient = Utils.getAuthenticatorClient(this.clientID, this.secret, TimeStamp);
+    this.send(Command.Login, {
+      ClientID: this.clientID,
+      AuthenticatorClient,
+      LoginMode: 2,
+      TimeStamp: parseInt(TimeStamp),
+      ClientVersion: this.ClientVersion,
+    });
   }
 
   /**
@@ -96,7 +94,7 @@ export default class Socket extends EventEmitter {
    * @param port
    * @param host
    */
-  connectSocket(host: string, port: number) {
+  async connectSocket(host: string, port: number) {
     if (this.isReady) return Promise.resolve();
     if (this.socket) return Promise.resolve();
     this.socket = new net.Socket();
@@ -152,27 +150,11 @@ export default class Socket extends EventEmitter {
     this.socket.write(buf);
 
     //超时后60秒进行重发，总共不超过3次
-    const timeoutHandle = setTimeout(() => {
-      this.popPromise(command, timeoutHandle, body);
-    }, this.config.heartbeatTimeout);
+    // const timeoutHandle = setTimeout(() => {
+    //   this.popPromise(command, body);
+    // }, this.config.heartbeatTimeout);
 
-    this.pushPromise(command, timeoutHandle, body);
-  }
-
-  /**
-   * 获取数据状态
-   * @param data
-   */
-  fetchData(data: { header: IHeader; buffer: Buffer }) {
-    if (this.bufferCache.length < this.headerLength) return false;
-
-    data.header = Utils.ReadHeader(this.bufferCache);
-    if (this.bufferCache.length < data.header.PacketLength) return false;
-
-    data.buffer = this.bufferCache.slice(0, data.header.PacketLength);
-    socketDebug('%d receive buffer: ', data.header.RequestID, data.buffer);
-    this.bufferCache = this.bufferCache.slice(data.header.PacketLength);
-    return true;
+    // this.pushPromise(command, timeoutHandle, body);
   }
 
   /**
@@ -183,20 +165,20 @@ export default class Socket extends EventEmitter {
   async handleBuffer(buffer: Buffer, header: IHeader) {
     const bodyObj: IReqBody & IResBody = Utils.ReadBody(buffer.slice(this.headerLength), header.RequestID);
 
-    //证明有响应，则取消重试
-    this.sequenceMap.get(header.SequenceID).forEach(timeHandle => {
-      clearTimeout(timeHandle);
-    });
+    // //证明有响应，则取消重试
+    // this.sequenceMap.get(header.SequenceID).forEach(timeHandle => {
+    //   clearTimeout(timeHandle);
+    // });
 
-    //删除缓存
-    this.sequenceMap.delete(header.SequenceID);
+    // //删除缓存
+    // this.sequenceMap.delete(header.SequenceID);
 
     // 服务端发送Exit请求
     if (header.RequestID === Command.Exit) {
       this.emit('exit');
       clearTimeout(this.heartbeatHandle);
       this.isReady = false;
-      this.sendResponse(Command.Exit, header.RequestID);
+      this.sendResponse(Command.Exit_Resp, header.RequestID);
       await sleep(100);
       this.destroySocket();
       return;
@@ -211,19 +193,18 @@ export default class Socket extends EventEmitter {
     }
 
     // 信令检测
-    if (header.RequestID === Command.Active_Test) {
-      this.sendResponse(Command.Active_Test_Resp, header.SequenceID);
+    if (header.RequestID === Command.Active_Test_Resp) {
+      // this.sendResponse(Command.Active_Test_Resp, header.SequenceID);
       return;
     }
 
     //如果消息为除了上行消息和状态报告的响应
     if (header.RequestID > 0x80000000) {
-      const timeHandle = this.sequenceMap.get(header.SequenceID);
-      if (!timeHandle) {
-        this.emit('error', new Error(RequestIdDes[header.RequestID] + ': resp has no timeHandle'));
-        return;
-      }
-
+      // const timeHandle = this.sequenceMap.get(header.SequenceID);
+      // if (!timeHandle) {
+      //   this.emit('error', new Error(RequestIdDes[header.RequestID] + ': resp has no timeHandle'));
+      //   return;
+      // }
       if (bodyObj?.Status > 0) {
         let result = 'result:' + (Errors[bodyObj.Status] || bodyObj.Status);
         if (header.RequestID === Command.Login_Resp) result = 'status:' + (Errors[bodyObj.Status] || bodyObj.Status);
@@ -273,10 +254,13 @@ export default class Socket extends EventEmitter {
     switch (RequestIdDes[command]) {
       case 'Login':
         mapkey = `${command}#${body.ClientID}`;
+        break;
       case 'Submit':
-        mapkey = `${command}#${body.DestTermID}#${body.MsgContent}`;
+        mapkey = `${command}#${body.DestTermID}#${body.MsgContent.toString()}`;
+        break;
       case 'Deliver_Resp':
         mapkey = `${command}#${body.MsgID}#${body.Status}`;
+        break;
       default:
         mapkey = `${command}`;
     }
@@ -293,15 +277,18 @@ export default class Socket extends EventEmitter {
    * @param sequenceId 流水号
    * @param deferred
    */
-  popPromise(command: keyof IRequestId, timeHandle: NodeJS.Timeout, body?: Record<string, number | string>) {
+  popPromise(command: keyof IRequestId, body?: Record<string, number | string>) {
     let mapkey;
     switch (RequestIdDes[command]) {
       case 'Login':
         mapkey = `${command}#${body.ClientID}`;
+        break;
       case 'Submit':
         mapkey = `${command}#${body.DestTermID}#${body.MsgContent}`;
+        break;
       case 'Deliver_Resp':
         mapkey = `${command}#${body.MsgID}#${body.Status}`;
+        break;
       default:
         mapkey = `${command}`;
     }
@@ -327,7 +314,7 @@ export default class Socket extends EventEmitter {
     const DestTermID = Buffer.alloc(21, 0);
     DestTermID.write(mobile, 'ascii');
     if (!IsLongSms) {
-      const MsgContentStr = iconv.encode(content, 'gbk');
+      const MsgContentStr = iconv.encode(content, 'GB18030');
       const MsgContent = Buffer.from(MsgContentStr);
       const MsgLength = MsgContent.length;
       const Submitbody = Object.assign(body, { ServiceID, SrcTermID, DestTermID, MsgContent, MsgLength });
@@ -340,7 +327,7 @@ export default class Socket extends EventEmitter {
       UdhiBuf.writeInt8(5, 0);
       UdhiBuf.writeInt8(0, 1);
       UdhiBuf.writeInt8(3, 2);
-      UdhiBuf.writeInt8(Math.floor(Math.random() * 128), 3);
+      UdhiBuf.writeInt8(Utils.getlongSmsNo(), 3);
       UdhiBuf.writeInt8(PkTotal, 4);
       new Array(PkTotal).fill(0).forEach((item, index) => {
         UdhiBuf.writeInt8(index + 1, 5);
@@ -350,5 +337,21 @@ export default class Socket extends EventEmitter {
         this.send(Command.Submit, Submitbody);
       });
     }
+  }
+
+  /**
+   * 获取数据状态
+   * @param data
+   */
+  fetchData(data: { header: IHeader; buffer: Buffer }) {
+    if (this.bufferCache.length < Utils.headerLength) return false;
+
+    data.header = Utils.ReadHeader(this.bufferCache);
+    if (this.bufferCache.length < data.header.PacketLength) return false;
+
+    data.buffer = this.bufferCache.slice(0, data.header.PacketLength);
+    // socketDebug('%d receive buffer: ', data.header.RequestID, data.buffer);
+    this.bufferCache = this.bufferCache.slice(data.header.PacketLength);
+    return true;
   }
 }

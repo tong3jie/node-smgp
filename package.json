@@ -1,6 +1,6 @@
 {
   "name": "node-smgp",
-  "version": "0.0.3",
+  "version": "0.0.5",
   "description": "a tool for chinatelecom smgp",
   "main": "built/index.js",
   "files": [
