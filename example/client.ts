@@ -20,6 +20,10 @@ client.on('deliver', (deliverRes, callback) => {
   console.log('submit', `${deliverRes.body.DestTermID}:${deliverRes.body.time}`);
 });
 
+client.on('timeout', (phone, content) => {
+  console.log('error', phone, content);
+});
+
 client.on('error', error => {
   console.log('error', error);
 });

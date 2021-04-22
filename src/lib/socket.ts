@@ -333,7 +333,7 @@ export default class Socket extends EventEmitter {
       }
       if (body?.time > 3) {
         this.sequenceMap.delete(key);
-        this.emit('error', 'send faild:', body?.DestTermID);
+        this.emit('timeout', body?.DestTermID, body.MsgContent);
       }
     }
     await sleep(60000);
