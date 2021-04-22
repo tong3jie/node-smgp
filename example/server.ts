@@ -8,7 +8,8 @@ const server = new Server({
     return { Status: 0, AuthenticatorServer: '1', ServerVersion: 0x03 };
   },
   Submit: (submitMsg: { header: IHeader; body: ISubmit }): ISubmit_Resp => {
-    console.log(submitMsg);
+    // console.log(submitMsg);
+
     return { Status: 0, MsgID: Date.now().toString() };
   },
   Deliver: (deliverMsg: { header: IHeader; body: IDeliver_Resp }) => {
@@ -17,3 +18,6 @@ const server = new Server({
 });
 
 server.start();
+server.on('error', error => {
+  console.log(error);
+});

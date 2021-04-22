@@ -50,7 +50,9 @@ export default class SmgpServer extends EventEmitter {
         this.emit('error');
       });
     });
-    server.listen({ port: this.config.port, host: this.config.host });
+    server.listen({ port: this.config.port, host: this.config.host }, () => {
+      console.log('server was started!');
+    });
   }
 
   /**

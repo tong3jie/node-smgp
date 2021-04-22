@@ -1,6 +1,5 @@
 import * as net from 'net';
 import * as util from 'util';
-import * as lodash from 'lodash';
 import * as iconv from 'iconv-lite';
 import Util from './util';
 const Utils = new Util();
@@ -25,7 +24,7 @@ export default class Socket extends EventEmitter {
   private bufferCache: Buffer;
   private headerLength: number;
   private socket: net.Socket;
-  private sequenceMap: Map<number, NodeJS.Timeout[]>;
+  private sequenceMap: Map<string, Record<string, any>>;
   private contentLimit = 70; //短信内容长度
   constructor(config: IConfig) {
     super();
@@ -41,6 +40,7 @@ export default class Socket extends EventEmitter {
     this.sequenceMap = new Map();
     this.heartbeatMaxAttempts = this.config.heartbeatMaxAttempts ?? 3;
     this.connect(this.host, this.port);
+    this.reSend();
   }
 
   /**
@@ -70,11 +70,11 @@ export default class Socket extends EventEmitter {
    * @param host
    */
   connect(host: string, port: number) {
-    socketDebug(`start to create connection`);
+    console.log(`start to create connection`);
     (async () => {
       await this.connectSocket(host, port);
     })();
-    socketDebug(`${host}:${port} connected`);
+    console.log(`${host}:${port} connected`);
     this.heartbeatAttempts = 0;
     this.handleHeartbeat();
     this.isReady = true;
@@ -114,13 +114,11 @@ export default class Socket extends EventEmitter {
 
     this.socket.on('error', err => {
       this.emit('error', err);
-      Promise.reject(err);
       this.destroySocket();
     });
 
     this.socket.on('connect', () => {
       this.emit('connect');
-      Promise.resolve();
     });
     this.socket.connect(port, host);
     return Promise.resolve();
@@ -143,18 +141,14 @@ export default class Socket extends EventEmitter {
    * @param body
    */
   async send(command: keyof IRequestId, body?) {
-    if (this.sequenceMap.size > 16) return '下发速度太快！';
+    // if (this.sequenceMap.size > 16) return this.emit('error', '下发速度太快！');
     const SequenceID = Utils.getSequenceId();
     const buf = Utils.getBuf({ SequenceID, RequestID: command }, body);
     socketDebug(`${command} send buffer: ${util.inspect(buf)}`);
     this.socket.write(buf);
-
-    //超时后60秒进行重发，总共不超过3次
-    // const timeoutHandle = setTimeout(() => {
-    //   this.popPromise(command, body);
-    // }, this.config.heartbeatTimeout);
-
-    // this.pushPromise(command, timeoutHandle, body);
+    if (command === Command.Submit) {
+      this.pushPromise({ SequenceID, RequestID: command }, body);
+    }
   }
 
   /**
@@ -165,13 +159,26 @@ export default class Socket extends EventEmitter {
   async handleBuffer(buffer: Buffer, header: IHeader) {
     const bodyObj: IReqBody & IResBody = Utils.ReadBody(buffer.slice(this.headerLength), header.RequestID);
 
-    // //证明有响应，则取消重试
-    // this.sequenceMap.get(header.SequenceID).forEach(timeHandle => {
-    //   clearTimeout(timeHandle);
-    // });
+    // 服务端返回login请求
+    if (header.RequestID === Command.Login_Resp) {
+      if (bodyObj.Status !== 0) {
+        const msg = `command: ${RequestIdDes[header.RequestID]} failed! result: ${Errors[bodyObj.Status] || bodyObj.Status}`;
+        this.emit('error', msg);
+        clearTimeout(this.heartbeatHandle);
+        this.isReady = false;
+        await sleep(100);
+        this.destroySocket();
+      }
+      console.log('congratulations! server was connected');
+      return;
+    }
 
-    // //删除缓存
-    // this.sequenceMap.delete(header.SequenceID);
+    // 服务端返回submit请求
+    if (header.RequestID === Command.Submit_Resp) {
+      const submitBody = this.popPromise(header);
+      this.emit('submit', { header, body: { ...submitBody, ...bodyObj } });
+      return;
+    }
 
     // 服务端发送Exit请求
     if (header.RequestID === Command.Exit) {
@@ -194,29 +201,17 @@ export default class Socket extends EventEmitter {
 
     // 信令检测
     if (header.RequestID === Command.Active_Test_Resp) {
-      // this.sendResponse(Command.Active_Test_Resp, header.SequenceID);
       return;
     }
 
     //如果消息为除了上行消息和状态报告的响应
     if (header.RequestID > 0x80000000) {
-      // const timeHandle = this.sequenceMap.get(header.SequenceID);
-      // if (!timeHandle) {
-      //   this.emit('error', new Error(RequestIdDes[header.RequestID] + ': resp has no timeHandle'));
-      //   return;
-      // }
       if (bodyObj?.Status > 0) {
-        let result = 'result:' + (Errors[bodyObj.Status] || bodyObj.Status);
-        if (header.RequestID === Command.Login_Resp) result = 'status:' + (Errors[bodyObj.Status] || bodyObj.Status);
-        const msg = 'command:' + RequestIdDes[header.RequestID] + ' failed. result:' + result;
+        const msg = `command: ${RequestIdDes[header.RequestID]} failed! result: ${Errors[bodyObj.Status] || bodyObj.Status}`;
         this.emit('error', msg);
-      } else {
-        this.emit('deliver', { header: header, body: bodyObj });
+        return;
       }
-      return;
     }
-    this.emit('error', new Error(RequestIdDes[header.RequestID] + ': no handler found'));
-    return;
   }
 
   /**
@@ -249,26 +244,14 @@ export default class Socket extends EventEmitter {
    * @param sequenceId 流水号
    * @param deferred
    */
-  pushPromise(command: keyof IRequestId, timeHandle: NodeJS.Timeout, body?: Record<string, number | string>) {
-    let mapkey;
-    switch (RequestIdDes[command]) {
-      case 'Login':
-        mapkey = `${command}#${body.ClientID}`;
-        break;
-      case 'Submit':
-        mapkey = `${command}#${body.DestTermID}#${body.MsgContent.toString()}`;
-        break;
-      case 'Deliver_Resp':
-        mapkey = `${command}#${body.MsgID}#${body.Status}`;
-        break;
-      default:
-        mapkey = `${command}`;
-    }
+  pushPromise(header: IHeader, body?: Record<string, any>) {
+    const mapkey = `${header.SequenceID}`;
 
-    if (!this.sequenceMap.has(mapkey)) {
-      this.sequenceMap.set(mapkey, [timeHandle]);
-    } else if (lodash.isArray(this.sequenceMap.get(mapkey))) {
-      this.sequenceMap.set(mapkey, this.sequenceMap.get(mapkey).concat(timeHandle));
+    if (body?.time) {
+      body.time++;
+      this.sequenceMap.set(mapkey, { ...body, timeStamp: Date.now() });
+    } else {
+      this.sequenceMap.set(mapkey, { ...body, timeStamp: Date.now(), time: 1 });
     }
   }
 
@@ -277,30 +260,11 @@ export default class Socket extends EventEmitter {
    * @param sequenceId 流水号
    * @param deferred
    */
-  popPromise(command: keyof IRequestId, body?: Record<string, number | string>) {
-    let mapkey;
-    switch (RequestIdDes[command]) {
-      case 'Login':
-        mapkey = `${command}#${body.ClientID}`;
-        break;
-      case 'Submit':
-        mapkey = `${command}#${body.DestTermID}#${body.MsgContent}`;
-        break;
-      case 'Deliver_Resp':
-        mapkey = `${command}#${body.MsgID}#${body.Status}`;
-        break;
-      default:
-        mapkey = `${command}`;
-    }
-
-    if (!this.sequenceMap.has(mapkey) || this.sequenceMap.get(mapkey).length <= 3) {
-      this.send(command, body);
-    } else {
-      process.nextTick(() => {
-        this.sequenceMap.delete(mapkey);
-      });
-      this.emit('timeout', command, mapkey, body);
-    }
+  popPromise(header: IHeader) {
+    const mapkey = `${header.SequenceID}`;
+    const submitBody = this.sequenceMap.get(mapkey);
+    if (this.sequenceMap.delete(mapkey)) return submitBody;
+    else this.emit('error', 'no this handle');
   }
 
   sendSms(mobile: string, content: string, extendCode?: string) {
@@ -353,5 +317,26 @@ export default class Socket extends EventEmitter {
     // socketDebug('%d receive buffer: ', data.header.RequestID, data.buffer);
     this.bufferCache = this.bufferCache.slice(data.header.PacketLength);
     return true;
+  }
+
+  /**
+   * 失败消息重发三次
+   * @returns
+   */
+  async reSend() {
+    for (const [key, body] of this.sequenceMap.entries()) {
+      if (!body) return;
+      const isTimeOut = Date.now() - body?.timeStamp > 60000 ? true : false;
+      if (isTimeOut && body?.time <= 3) {
+        this.sequenceMap.delete(key);
+        this.send(Command.Submit, body);
+      }
+      if (body?.time > 3) {
+        this.sequenceMap.delete(key);
+        this.emit('error', 'send faild:', body?.DestTermID);
+      }
+    }
+    await sleep(60000);
+    this.reSend();
   }
 }

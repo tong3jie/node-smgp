@@ -131,6 +131,7 @@ const commandDes = {
     { name: 'Dlvrd', type: 'string', length: 3 },
     { name: 'Submit_date', type: 'string', length: 10 },
     { name: 'done_date', type: 'string', length: 10 },
+    { name: 'Stat', type: 'string', length: 7 },
     { name: 'Err', type: 'string', length: 3 },
     { name: 'Txt', type: 'string', length: 20 },
   ],
