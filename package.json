@@ -1,10 +1,10 @@
 {
   "name": "node-smgp",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "a tool for chinatelecom smgp",
-  "main": "built/index.js",
+  "main": "dist/index.js",
   "files": [
-    "built/"
+    "dist/"
   ],
   "scripts": {
     "build": "rm -rf built && tsc"
