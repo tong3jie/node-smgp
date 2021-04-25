@@ -115,6 +115,9 @@ export default class Socket extends EventEmitter {
     this.socket.on('error', err => {
       this.emit('error', err);
       this.destroySocket();
+      setTimeout(() => {
+        this.connect(this.host, this.port);
+      }, this.config.heartbeatInterval);
     });
 
     this.socket.on('connect', () => {

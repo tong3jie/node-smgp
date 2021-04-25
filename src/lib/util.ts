@@ -261,7 +261,6 @@ export default class Util {
   }
 
   getlongSmsNo() {
-    this.longSmsNo >= 127 ? 1 : this.longSmsNo++;
-    return this.longSmsNo;
+    return this.longSmsNo >= 127 ? 1 : this.longSmsNo++;
   }
 }

@@ -90,9 +90,10 @@ export default class SmgpServer extends EventEmitter {
 
     // 服务端发送上行或者状态报告
     if (header.RequestID === Command.Submit) {
-      const buf = Utils.getBuf({ SequenceID: header.SequenceID, RequestID: Command.Submit_Resp }, { MsgID: Date.now().toString(), Status: 0 });
+      const submitRes = this.Submit({ header: header, body: bodyObj });
+      const buf = Utils.getBuf({ SequenceID: header.SequenceID, RequestID: Command.Submit_Resp }, submitRes);
       this.socket.write(buf);
-      this.Submit({ header: header, body: bodyObj });
+
       return;
     }
 

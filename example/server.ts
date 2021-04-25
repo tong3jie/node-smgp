@@ -1,5 +1,4 @@
 import { IDeliver_Resp, ILogin, ILogin_Resp, ISubmit, ISubmit_Resp, Server, IHeader } from '../src/index';
-
 const server = new Server({
   host: '127.0.0.1',
   port: 9000,
@@ -8,7 +7,7 @@ const server = new Server({
     return { Status: 0, AuthenticatorServer: '1', ServerVersion: 0x03 };
   },
   Submit: (submitMsg: { header: IHeader; body: ISubmit }): ISubmit_Resp => {
-    // console.log(submitMsg);
+    console.log(submitMsg);
 
     return { Status: 0, MsgID: Date.now().toString() };
   },
