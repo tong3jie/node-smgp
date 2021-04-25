@@ -1,4 +1,4 @@
-import { Client } from '../src/index';
+import { Client } from 'node-smgp';
 
 const client = new Client({
   host: '127.0.0.1',

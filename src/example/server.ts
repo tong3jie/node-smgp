@@ -1,4 +1,4 @@
-import { IDeliver_Resp, ILogin, ILogin_Resp, ISubmit, ISubmit_Resp, Server, IHeader } from '../src/index';
+import { IDeliver_Resp, ILogin, ILogin_Resp, ISubmit, ISubmit_Resp, Server, IHeader } from 'node-smgp';
 const server = new Server({
   host: '127.0.0.1',
   port: 9000,
