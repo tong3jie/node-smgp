@@ -145,7 +145,7 @@ export interface IDeliver {
   SrcTermID: string;
   DestTermID: string;
   MsgLength: number;
-  MsgContent: string;
+  MsgContent: string | IDeliver_Report_Cotent;
   Reserve: string;
 }
 
@@ -167,7 +167,8 @@ export interface IDeliver_Resp {
 export interface IServerConf {
   host: string;
   port: number;
-  Login: (loginMsg: { header: IHeader; body: ILogin }) => ILogin_Resp;
-  Submit: (submitMsg: { header: IHeader; body: ISubmit }) => ISubmit_Resp;
-  Deliver: (deliverMsg: { header: IHeader; body: IDeliver_Resp }) => void;
+  LoginRes: (loginResMsg: { header: IHeader; body: ILogin }) => ILogin_Resp;
+  SubmitRes: (submitResMsg: { header: IHeader; body: ISubmit }) => ISubmit_Resp;
+  DeliverRes: (deliverResMsg: { header: IHeader; body: IDeliver_Resp }) => void;
+  // Deliver: (deliverMsg: { header: IHeader; body: IDeliver | IDeliver_Report_Cotent }) => void;
 }

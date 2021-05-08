@@ -1,7 +1,7 @@
 import * as net from 'net';
 import Util from './util';
 const Utils = new Util();
-import { IHeader, IResBody, IReqBody, IServerConf } from './interface';
+import { IHeader, IResBody, IReqBody, IServerConf, IDeliver } from './interface';
 import { Command } from './comConfig';
 import { EventEmitter } from 'events';
 import { result } from 'lodash';
@@ -11,16 +11,16 @@ export default class SmgpServer extends EventEmitter {
   public config: IServerConf;
   public server: net.Server;
   public socket: net.Socket;
-  public Login: Function;
-  public Submit: Function;
-  public Deliver: Function;
+  public LoginRes: Function;
+  public SubmitRes: Function;
+  public DeliverRes: Function;
 
   constructor(config: IServerConf) {
     super();
     this.config = config;
-    this.Login = config.Login;
-    this.Submit = config.Submit;
-    this.Deliver = config.Deliver;
+    this.LoginRes = config.LoginRes;
+    this.SubmitRes = config.SubmitRes;
+    this.DeliverRes = config.DeliverRes;
   }
 
   start() {
@@ -73,7 +73,7 @@ export default class SmgpServer extends EventEmitter {
 
     // 服务端发送注册请求
     if (header.RequestID === Command.Login) {
-      const reult: boolean = this.Login(bodyObj);
+      const reult: boolean = this.LoginRes(bodyObj);
       const buf = Utils.getBuf({ SequenceID: header.SequenceID, RequestID: Command.Login_Resp }, { Status: reult ? 0 : 21, AuthenticatorServer: '123', ServerVersion: 0x30 });
       this.socket.write(buf);
       if (!result) this.socket.destroy();
@@ -90,8 +90,9 @@ export default class SmgpServer extends EventEmitter {
 
     // 服务端发送上行或者状态报告
     if (header.RequestID === Command.Submit) {
-      const submitRes = this.Submit({ header: header, body: bodyObj });
+      const submitRes = this.SubmitRes({ header: header, body: bodyObj });
       const buf = Utils.getBuf({ SequenceID: header.SequenceID, RequestID: Command.Submit_Resp }, submitRes);
+
       this.socket.write(buf);
 
       return;
@@ -106,7 +107,7 @@ export default class SmgpServer extends EventEmitter {
 
     //如果消息为除了上行消息和状态报告的响应
     if (header.RequestID === 0x80000003) {
-      this.Deliver({ header: header, body: bodyObj });
+      this.DeliverRes({ header: header, body: bodyObj });
       return;
     }
     this.emit('error', new Error('no handler found'));
@@ -127,5 +128,10 @@ export default class SmgpServer extends EventEmitter {
     // socketDebug('%d receive buffer: ', data.header.RequestID, data.buffer);
     this.bufferCache = this.bufferCache.slice(data.header.PacketLength);
     return true;
+  }
+
+  deliver(body: IDeliver) {
+    const buf = Utils.getBuf({ SequenceID: Utils.getSequenceId(), RequestID: Command.Deliver }, body);
+    this.socket.write(buf);
   }
 }

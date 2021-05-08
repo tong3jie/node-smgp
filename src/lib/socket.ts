@@ -270,7 +270,14 @@ export default class Socket extends EventEmitter {
     else this.emit('error', 'no this handle');
   }
 
-  sendSms(mobile: string, content: string, extendCode?: string) {
+  /**
+   *
+   * @param mobile 手机号码
+   * @param content 发送内容
+   * @param extendCode 扩展码
+   * @returns Void
+   */
+  sendSms(mobile: string, content: string, extendCode?: string): boolean | void {
     if (!this.isReady) {
       return this.emit('error', 'tcp socket is not Ready. please retry later');
     }
@@ -324,7 +331,7 @@ export default class Socket extends EventEmitter {
 
   /**
    * 失败消息重发三次
-   * @returns
+   * @returns void
    */
   async reSend() {
     for (const [key, body] of this.sequenceMap.entries()) {

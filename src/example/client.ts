@@ -16,8 +16,8 @@ client.on('submit', submitRes => {
 });
 
 client.on('deliver', (deliverRes, callback) => {
-  callback();
-  console.log('submit', `${deliverRes.body.DestTermID}:${deliverRes.body.time}`);
+  if (callback) callback();
+  console.log('deliver', `${deliverRes.body.DestTermID}`);
 });
 
 client.on('timeout', (phone, content) => {

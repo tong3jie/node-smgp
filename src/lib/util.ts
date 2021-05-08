@@ -11,24 +11,47 @@ export default class Util {
   public headerLength: number;
 
   constructor() {
+    // 流水号
     this.sequenceId = 0x00000000;
+    // 发送长短信的
     this.longSmsNo = 0;
+    // 长短信内容头
     this.headerLength = 12;
   }
 
+  /**
+   * 获取序列号
+   * @returns number
+   */
   getSequenceId(): number {
     this.sequenceId >= 0xffffffff ? 1 : this.sequenceId++;
     return this.sequenceId;
   }
 
+  /**
+   * 时间戳
+   * @returns string
+   */
   TimeStamp = () => {
     return dayjs().format('MMDDHHmmss');
   };
 
+  /**
+   * MD5加密
+   * @param str string
+   * @returns string
+   */
   MD5(str: string | Buffer): string {
     return crypto.createHash('md5').update(str).digest('hex').toString();
   }
 
+  /**
+   * 鉴权加密
+   * @param ClientID
+   * @param secret
+   * @param timestamp
+   * @returns
+   */
   getAuthenticatorClient(ClientID: string, secret: string, timestamp: string): string {
     const buffers = [];
     buffers.push(Buffer.from(ClientID));
