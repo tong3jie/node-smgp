@@ -127,6 +127,20 @@ server.on('error', error => {
 });
 
 ```
+## deliver 
+```javascript
+server.deliver({ 
+  MsgID: '123', 
+  IsReport: 1, 
+  MsgFormat: 8, 
+  RecvTime: Date.now().toString(), 
+  SrcTermID: '10691234', 
+  DestTermID: '13301112222', 
+  MsgLength: 12, 
+  MsgContent: '123', 
+  Reserve: '' 
+})
+```
 
 ## Questions & Suggestions
 
