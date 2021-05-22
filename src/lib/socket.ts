@@ -8,7 +8,7 @@ import { EventEmitter } from 'events';
 import * as debug from 'debug';
 const socketDebug = debug('socket');
 import { IConfig, IRequestId, IHeader, IResBody, IReqBody } from './interface';
-import { defConfig, Command, RequestIdDes, Errors } from './comConfig';
+import { defConfig, Command, RequestIdDes, Errors } from './Config';
 
 export default class Socket extends EventEmitter {
   private config: IConfig;
@@ -22,10 +22,10 @@ export default class Socket extends EventEmitter {
   private heartbeatMaxAttempts: number;
   private heartbeatHandle: NodeJS.Timeout;
   private bufferCache: Buffer;
-  private headerLength: number;
+  private HEADER_LENGTH: number;
   private socket: net.Socket;
   private sequenceMap: Map<string, Record<string, any>>;
-  private contentLimit = 70; //短信内容长度
+  private CONTENT_Limit = 70; //短信内容长度
   constructor(config: IConfig) {
     super();
     this.config = Object.assign(defConfig, config);
@@ -36,7 +36,7 @@ export default class Socket extends EventEmitter {
     this.ClientVersion = this.config.ClientVersion ?? 0x30;
     this.isReady = false;
     this.heartbeatAttempts = 0;
-    this.headerLength = 12;
+    this.HEADER_LENGTH = 12;
     this.sequenceMap = new Map();
     this.heartbeatMaxAttempts = this.config.heartbeatMaxAttempts ?? 3;
     this.connect(this.host, this.port);
@@ -79,7 +79,7 @@ export default class Socket extends EventEmitter {
     this.handleHeartbeat();
     this.isReady = true;
     const TimeStamp = Utils.TimeStamp();
-    const AuthenticatorClient = Utils.getAuthenticatorClient(this.clientID, this.secret, TimeStamp);
+    const AuthenticatorClient = Utils.getAuthenticator(this.clientID, this.secret, TimeStamp);
     this.send(Command.Login, {
       ClientID: this.clientID,
       AuthenticatorClient,
@@ -146,7 +146,7 @@ export default class Socket extends EventEmitter {
   async send(command: keyof IRequestId, body?) {
     // if (this.sequenceMap.size > 16) return this.emit('error', '下发速度太快！');
     const SequenceID = Utils.getSequenceId();
-    const buf = Utils.getBuf({ SequenceID, RequestID: command }, body);
+    const buf = Utils.encode({ SequenceID, RequestID: command }, body);
     socketDebug(`${command} send buffer: ${util.inspect(buf)}`);
     this.socket.write(buf);
     if (command === Command.Submit) {
@@ -160,7 +160,7 @@ export default class Socket extends EventEmitter {
    * @param header
    */
   async handleBuffer(buffer: Buffer, header: IHeader) {
-    const bodyObj: IReqBody & IResBody = Utils.ReadBody(buffer.slice(this.headerLength), header.RequestID);
+    const bodyObj: IReqBody & IResBody = Utils.decodeBody(buffer.slice(this.HEADER_LENGTH), header.RequestID);
 
     // 服务端返回login请求
     if (header.RequestID === Command.Login_Resp) {
@@ -224,7 +224,7 @@ export default class Socket extends EventEmitter {
    * @param body
    */
   sendResponse(command: number, sequence: number, ResBody?: IResBody) {
-    const buf = Utils.getBuf({ SequenceID: sequence, RequestID: command }, ResBody);
+    const buf = Utils.encode({ SequenceID: sequence, RequestID: command }, ResBody);
     socketDebug('%s send buffer:', command, util.inspect(buf));
     this.socket.write(buf);
   }
@@ -281,8 +281,8 @@ export default class Socket extends EventEmitter {
     if (!this.isReady) {
       return this.emit('error', 'tcp socket is not Ready. please retry later');
     }
-    const IsLongSms: boolean = content.length > this.contentLimit;
-    const body = Utils.getSmsBody(IsLongSms);
+    const IsLongSms: boolean = content.length > this.CONTENT_Limit;
+    const body = Utils.getDefBody(IsLongSms);
     const ServiceID = this.config.serviceId;
     const SrcTermID = extendCode ? this.config.srcId + extendCode : this.config.srcId;
     const DestTermID = Buffer.alloc(21, 0);
@@ -314,17 +314,17 @@ export default class Socket extends EventEmitter {
   }
 
   /**
-   * 获取数据状态
+   * 获取数据状态，如果数据超过包头长度，则读取包头中包含的包体的长度
    * @param data
+   * @returns bollen
    */
   fetchData(data: { header: IHeader; buffer: Buffer }) {
-    if (this.bufferCache.length < Utils.headerLength) return false;
+    if (this.bufferCache.length < Utils.HEADER_LENGTH) return false;
 
-    data.header = Utils.ReadHeader(this.bufferCache);
+    data.header = Utils.decodeHeader(this.bufferCache);
     if (this.bufferCache.length < data.header.PacketLength) return false;
 
     data.buffer = this.bufferCache.slice(0, data.header.PacketLength);
-    // socketDebug('%d receive buffer: ', data.header.RequestID, data.buffer);
     this.bufferCache = this.bufferCache.slice(data.header.PacketLength);
     return true;
   }

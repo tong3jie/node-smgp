@@ -3,20 +3,20 @@ import * as crypto from 'crypto';
 import * as lodash from 'lodash';
 import * as iconv from 'iconv-lite';
 import { IHeader, IField, IConmmand, IReqBody, IResBody } from './interface';
-import { Command, RequestIdDes, commandDes } from './comConfig';
+import { Command, RequestIdDes, commandDes } from './Config';
 
 export default class Util {
   private sequenceId: number;
   private longSmsNo: number;
-  public headerLength: number;
+  public HEADER_LENGTH: number;
 
   constructor() {
     // 流水号
     this.sequenceId = 0x00000000;
-    // 发送长短信的
+    // 长短信的标识
     this.longSmsNo = 0;
-    // 长短信内容头
-    this.headerLength = 12;
+    // 短信内容头
+    this.HEADER_LENGTH = 12;
   }
 
   /**
@@ -24,7 +24,7 @@ export default class Util {
    * @returns number
    */
   getSequenceId(): number {
-    this.sequenceId >= 0xffffffff ? 1 : this.sequenceId++;
+    this.sequenceId >= 0xffffffff ? (this.sequenceId = 1) : this.sequenceId++;
     return this.sequenceId;
   }
 
@@ -52,31 +52,30 @@ export default class Util {
    * @param timestamp
    * @returns
    */
-  getAuthenticatorClient(ClientID: string, secret: string, timestamp: string): string {
+  getAuthenticator(ClientID: string, secret: string, timeStamp: string): string {
     const buffers = [];
     buffers.push(Buffer.from(ClientID));
     buffers.push(Buffer.alloc(7, 0));
     buffers.push(Buffer.from(secret));
-    buffers.push(Buffer.from(timestamp));
+    buffers.push(Buffer.from(timeStamp));
     const buffer = Buffer.concat(buffers);
-
     return this.MD5(buffer);
   }
 
   /**
-   * 获取发送的内容
+   * 获取发送的内容(JSON转Buffer)
    * @param header
    * @param body
    */
-  getBuf(header: IHeader, body?: IReqBody | IResBody) {
-    header.PacketLength = 12;
+  encode(header: IHeader, body?: IReqBody | IResBody) {
+    header.PacketLength = this.HEADER_LENGTH;
     let headBuf: Buffer;
     let bodyBuf: Buffer;
     if (body) {
-      bodyBuf = this.getBodyBuffer(header.RequestID, body);
+      bodyBuf = this.encodeBody(header.RequestID, body);
       header.PacketLength += bodyBuf.length;
     }
-    headBuf = this.getHeaderBuffer(header);
+    headBuf = this.encodeHeader(header);
     return bodyBuf ? Buffer.concat([headBuf, bodyBuf]) : headBuf;
   }
 
@@ -84,7 +83,7 @@ export default class Util {
    * 格式化响应消息头
    * @param buffer
    */
-  ReadHeader(buffer: Buffer): IHeader {
+  decodeHeader(buffer: Buffer): IHeader {
     const PacketLength = buffer.readUInt32BE(0);
     const RequestID = buffer.readUInt32BE(4);
     const SequenceID = buffer.readUInt32BE(8);
@@ -95,7 +94,7 @@ export default class Util {
    * 获取响应消息头
    * @param header
    */
-  getHeaderBuffer(header: IHeader): Buffer {
+  encodeHeader(header: IHeader): Buffer {
     const headerLength = 12;
     const buffer = Buffer.alloc(headerLength);
     buffer.writeUInt32BE(header.PacketLength, 0);
@@ -104,7 +103,13 @@ export default class Util {
     return buffer;
   }
 
-  getBodyBuffer(command: Command, body: Record<string, any>) {
+  /**
+   * 发送消息时，获取Body的Buffer，JSON转Buffer
+   * @param command  消息类型
+   * @param body  消息体:JSON
+   * @returns Buffer
+   */
+  encodeBody(command: Command, body: Record<string, any>) {
     const buffer = Buffer.alloc(1024 * 1024, 0);
     //根据指令获取指令含义
     const commandStr = RequestIdDes[command];
@@ -164,7 +169,7 @@ export default class Util {
    * @param command
    * @param buffer
    */
-  ReadBody(buffer: Buffer, command: Command | keyof IConmmand) {
+  decodeBody(buffer: Buffer, command: Command | keyof IConmmand) {
     const body: any = {};
     let commandStr: string;
     if (lodash.isNumber(command)) {
@@ -181,7 +186,7 @@ export default class Util {
 
     if (command === Command.Deliver) {
       if (body.IsReport === 1) {
-        body.MsgContent = this.ReadBody(body.MsgContent, 'Deliver_Report_Cotent');
+        body.MsgContent = this.decodeBody(body.MsgContent, 'Deliver_Report_Cotent');
       } else {
         switch (body.MsgFormat) {
           case 15: // gb 汉字
@@ -235,7 +240,7 @@ export default class Util {
     }
   }
 
-  getSmsBody(lang: boolean) {
+  getDefBody(lang: boolean) {
     if (lang === false) {
       return {
         MsgType: 6,
@@ -283,6 +288,10 @@ export default class Util {
     }
   }
 
+  /**
+   * 长短信包头标识
+   * @returns
+   */
   getlongSmsNo() {
     return this.longSmsNo >= 127 ? 1 : this.longSmsNo++;
   }
