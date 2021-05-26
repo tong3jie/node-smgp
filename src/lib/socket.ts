@@ -7,11 +7,11 @@ import * as sleep from 'sleep-promise';
 import { EventEmitter } from 'events';
 import * as debug from 'debug';
 const socketDebug = debug('socket');
-import { IConfig, IRequestId, IHeader, IResBody, IReqBody } from './interface';
+import { SMGP_IConfig, SMGP_IRequestId, SMGP_IHeader, SMGP_IResBody, SMGP_IReqBody } from './interface';
 import { defConfig, Command, RequestIdDes, Errors } from './Config';
 
 export default class Socket extends EventEmitter {
-  private config: IConfig;
+  private config: SMGP_IConfig;
   private host: string;
   private port: number;
   private clientID: string;
@@ -26,9 +26,10 @@ export default class Socket extends EventEmitter {
   private socket: net.Socket;
   private sequenceMap: Map<string, Record<string, any>>;
   private CONTENT_Limit = 70; //短信内容长度
-  constructor(config: IConfig) {
+
+  constructor(config: SMGP_IConfig) {
     super();
-    this.config = Object.assign(defConfig, config);
+    this.config = { ...defConfig, ...config };
     this.host = this.config.host;
     this.port = this.config.port;
     this.clientID = this.config.clientID;
@@ -70,16 +71,21 @@ export default class Socket extends EventEmitter {
    * @param host
    */
   connect(host: string, port: number) {
-    console.log(`start to create connection`);
+    console.log('start to create connection');
     (async () => {
       await this.connectSocket(host, port);
-    })();
-    console.log(`${host}:${port} connected`);
+    })().then(() => {
+      if (this.socket) {
+        console.log(`${host}:${port} connected`);
+      } else {
+        console.log(`${host}:${port} failed`);
+      }
+    });
     this.heartbeatAttempts = 0;
     this.handleHeartbeat();
     this.isReady = true;
     const TimeStamp = Utils.TimeStamp();
-    const AuthenticatorClient = Utils.getAuthenticator(this.clientID, this.secret, TimeStamp);
+    const AuthenticatorClient = Utils.getSmgpAuthenticator(this.clientID, this.secret, TimeStamp);
     this.send(Command.Login, {
       ClientID: this.clientID,
       AuthenticatorClient,
@@ -143,7 +149,7 @@ export default class Socket extends EventEmitter {
    * @param command
    * @param body
    */
-  async send(command: keyof IRequestId, body?) {
+  async send(command: keyof SMGP_IRequestId, body?) {
     // if (this.sequenceMap.size > 16) return this.emit('error', '下发速度太快！');
     const SequenceID = Utils.getSequenceId();
     const buf = Utils.encode({ SequenceID, RequestID: command }, body);
@@ -159,8 +165,8 @@ export default class Socket extends EventEmitter {
    * @param body
    * @param header
    */
-  async handleBuffer(buffer: Buffer, header: IHeader) {
-    const bodyObj: IReqBody & IResBody = Utils.decodeBody(buffer.slice(this.HEADER_LENGTH), header.RequestID);
+  async handleBuffer(buffer: Buffer, header: SMGP_IHeader) {
+    const bodyObj: SMGP_IReqBody & SMGP_IResBody = Utils.decodeBody(buffer.slice(this.HEADER_LENGTH), header.RequestID);
 
     // 服务端返回login请求
     if (header.RequestID === Command.Login_Resp) {
@@ -223,7 +229,7 @@ export default class Socket extends EventEmitter {
    * @param sequence
    * @param body
    */
-  sendResponse(command: number, sequence: number, ResBody?: IResBody) {
+  sendResponse(command: number, sequence: number, ResBody?: SMGP_IResBody) {
     const buf = Utils.encode({ SequenceID: sequence, RequestID: command }, ResBody);
     socketDebug('%s send buffer:', command, util.inspect(buf));
     this.socket.write(buf);
@@ -247,7 +253,7 @@ export default class Socket extends EventEmitter {
    * @param sequenceId 流水号
    * @param deferred
    */
-  pushPromise(header: IHeader, body?: Record<string, any>) {
+  pushPromise(header: SMGP_IHeader, body?: Record<string, any>) {
     const mapkey = `${header.SequenceID}`;
 
     if (body?.time) {
@@ -263,7 +269,7 @@ export default class Socket extends EventEmitter {
    * @param sequenceId 流水号
    * @param deferred
    */
-  popPromise(header: IHeader) {
+  popPromise(header: SMGP_IHeader) {
     const mapkey = `${header.SequenceID}`;
     const submitBody = this.sequenceMap.get(mapkey);
     if (this.sequenceMap.delete(mapkey)) return submitBody;
@@ -318,7 +324,7 @@ export default class Socket extends EventEmitter {
    * @param data
    * @returns bollen
    */
-  fetchData(data: { header: IHeader; buffer: Buffer }) {
+  fetchData(data: { header: SMGP_IHeader; buffer: Buffer }) {
     if (this.bufferCache.length < Utils.HEADER_LENGTH) return false;
 
     data.header = Utils.decodeHeader(this.bufferCache);

@@ -30,6 +30,7 @@ const enum Command {
   'Query_Resp' = 0x80000007,
   'Query_TE_Route' = 0x00000008,
   'Query_TE_Route_Resp' = 0x80000008,
+  'Deliver_Report_Cotent' = 0x88888888,
 }
 
 const RequestIdDes = {
@@ -49,6 +50,7 @@ const RequestIdDes = {
   0x80000007: 'Query_Resp',
   0x00000008: 'Query_TE_Route',
   0x80000008: 'Query_TE_Route_Resp',
+  0x88888888: 'Deliver_Report_Cotent',
 };
 
 const enum optionsTag {
@@ -122,7 +124,11 @@ const commandDes = {
     { name: 'SrcTermID', type: 'string', length: 21 },
     { name: 'DestTermID', type: 'string', length: 21 },
     { name: 'MsgLength', type: 'number', length: 1 },
-    { name: 'MsgContent', type: 'string', length: (obj: Record<string, any>) => obj.MsgLength },
+    {
+      name: 'MsgContent',
+      type: 'string',
+      length: (obj: Record<string, any>) => obj.MsgLength,
+    },
     { name: 'Reserve', type: 'string', length: 8 },
   ],
   Deliver_Report_Cotent: [

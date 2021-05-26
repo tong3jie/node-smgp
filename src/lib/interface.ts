@@ -1,4 +1,4 @@
-export interface IConfig {
+export interface SMGP_IConfig {
   host: string;
   port: number;
   clientID: string;
@@ -13,8 +13,7 @@ export interface IConfig {
   mobilesPerSecond?: number;
   heartbeatTimeout?: number;
 }
-
-export interface IConmmand {
+export interface SMGP_IConmmand {
   Login?: number;
   Login_Resp?: number;
   Submit?: number;
@@ -34,7 +33,7 @@ export interface IConmmand {
   Deliver_Report_Cotent?: number;
 }
 
-export interface IRequestId {
+export interface SMGP_IRequestId {
   0x00000001?: string;
   0x80000001?: string;
   0x00000002?: string;
@@ -52,18 +51,18 @@ export interface IRequestId {
   0x00000008?: string;
   0x80000008?: string;
 }
-export interface IHeader {
+export interface SMGP_IHeader {
   PacketLength?: number;
   RequestID: number;
   SequenceID: number;
 }
 
-export interface IField {
+export interface SMGP_IField {
   name: string;
   type: string;
-  length: number | Function;
+  length: number | ((obj: Record<string, any>) => number);
 }
-export interface IStat {
+export interface SMGP_IStat {
   DELIVRD: string;
   EXPIRED: string;
   DELETED: string;
@@ -73,7 +72,7 @@ export interface IStat {
   REJECTD: string;
 }
 
-export interface IErr {
+export interface SMGP_IErr {
   '000': '成功';
   '001': '用户不能通信';
   '002': '用户忙';
@@ -88,10 +87,10 @@ export interface IErr {
   '999': '未知错误';
 }
 
-export type IReqBody = ILogin | ISubmit | IDeliver;
-export type IResBody = ILogin_Resp | ISubmit_Resp | IDeliver_Resp;
+export type SMGP_IReqBody = SMGP_ILogin | SMGP_ISubmit | SMGP_IDeliver;
+export type SMGP_IResBody = SMGP_ILogin_Resp | SMGP_ISubmit_Resp | SMGP_IDeliver_Resp;
 
-export interface ILogin {
+export interface SMGP_ILogin {
   ClientID: string;
   AuthenticatorClient: string;
   LoginMode: number;
@@ -99,14 +98,14 @@ export interface ILogin {
   ClientVersion: number;
 }
 
-export interface ILogin_Resp {
+export interface SMGP_ILogin_Resp {
   Status: number;
   AuthenticatorServer: string;
   ServerVersion: number;
   MsgID?: string;
 }
 
-export interface ISubmit {
+export interface SMGP_ISubmit {
   MsgType: number;
   NeedReport: number;
   Priority: number;
@@ -132,12 +131,12 @@ export interface ISubmit {
   smsNo?: number;
 }
 
-export interface ISubmit_Resp {
+export interface SMGP_ISubmit_Resp {
   MsgID: string;
   Status: number;
 }
 
-export interface IDeliver {
+export interface SMGP_IDeliver {
   MsgID: string;
   IsReport: number;
   MsgFormat: number;
@@ -145,11 +144,11 @@ export interface IDeliver {
   SrcTermID: string;
   DestTermID: string;
   MsgLength: number;
-  MsgContent: string | IDeliver_Report_Cotent;
+  MsgContent: string | SMGP_IDeliver_Report_Cotent;
   Reserve: string;
 }
 
-export interface IDeliver_Report_Cotent {
+export interface SMGP_IDeliver_Report_Cotent {
   MsgID: string;
   sub: string;
   Dlvrd: string;
@@ -159,16 +158,16 @@ export interface IDeliver_Report_Cotent {
   Txt: string;
 }
 
-export interface IDeliver_Resp {
+export interface SMGP_IDeliver_Resp {
   MsgID: string;
   Status: number;
 }
 
-export interface IServerConf {
+export interface SMGP_IServerConf {
   host: string;
   port: number;
-  LoginRes: (loginResMsg: { header: IHeader; body: ILogin }) => ILogin_Resp;
-  SubmitRes: (submitResMsg: { header: IHeader; body: ISubmit }) => ISubmit_Resp;
-  DeliverRes: (deliverResMsg: { header: IHeader; body: IDeliver_Resp }) => void;
+  LoginRes: (loginResMsg: { header: SMGP_IHeader; body: SMGP_ILogin }) => SMGP_ILogin_Resp;
+  SubmitRes: (submitResMsg: { header: SMGP_IHeader; body: SMGP_ISubmit }) => SMGP_ISubmit_Resp;
+  DeliverRes: (deliverResMsg: { header: SMGP_IHeader; body: SMGP_IDeliver_Resp }) => void;
   // Deliver: (deliverMsg: { header: IHeader; body: IDeliver | IDeliver_Report_Cotent }) => void;
 }

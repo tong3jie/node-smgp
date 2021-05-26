@@ -2,7 +2,7 @@ import * as dayjs from 'dayjs';
 import * as crypto from 'crypto';
 import * as lodash from 'lodash';
 import * as iconv from 'iconv-lite';
-import { IHeader, IField, IConmmand, IReqBody, IResBody } from './interface';
+import { SMGP_IHeader, SMGP_IField, SMGP_IReqBody, SMGP_IResBody } from './interface';
 import { Command, RequestIdDes, commandDes } from './Config';
 
 export default class Util {
@@ -46,16 +46,34 @@ export default class Util {
   }
 
   /**
-   * 鉴权加密
+   * smgp鉴权加密
    * @param ClientID
    * @param secret
    * @param timestamp
    * @returns
    */
-  getAuthenticator(ClientID: string, secret: string, timeStamp: string): string {
+  getSmgpAuthenticator(ClientID: string, secret: string, timeStamp: string): string {
     const buffers = [];
+    console.log('ClientID', ClientID);
     buffers.push(Buffer.from(ClientID));
     buffers.push(Buffer.alloc(7, 0));
+    buffers.push(Buffer.from(secret));
+    buffers.push(Buffer.from(timeStamp));
+    const buffer = Buffer.concat(buffers);
+    return this.MD5(buffer);
+  }
+
+  /**
+   * smgp鉴权加密
+   * @param ClientID
+   * @param secret
+   * @param timestamp
+   * @returns
+   */
+  getCmppAuthenticator(Source_Addr: string, secret: string, timeStamp: string): string {
+    const buffers = [];
+    buffers.push(Buffer.from(Source_Addr));
+    buffers.push(Buffer.alloc(9, 0));
     buffers.push(Buffer.from(secret));
     buffers.push(Buffer.from(timeStamp));
     const buffer = Buffer.concat(buffers);
@@ -67,15 +85,14 @@ export default class Util {
    * @param header
    * @param body
    */
-  encode(header: IHeader, body?: IReqBody | IResBody) {
+  encode(header: SMGP_IHeader, body?: SMGP_IReqBody | SMGP_IResBody) {
     header.PacketLength = this.HEADER_LENGTH;
-    let headBuf: Buffer;
     let bodyBuf: Buffer;
     if (body) {
       bodyBuf = this.encodeBody(header.RequestID, body);
       header.PacketLength += bodyBuf.length;
     }
-    headBuf = this.encodeHeader(header);
+    const headBuf: Buffer = this.encodeHeader(header);
     return bodyBuf ? Buffer.concat([headBuf, bodyBuf]) : headBuf;
   }
 
@@ -83,7 +100,7 @@ export default class Util {
    * 格式化响应消息头
    * @param buffer
    */
-  decodeHeader(buffer: Buffer): IHeader {
+  decodeHeader(buffer: Buffer): SMGP_IHeader {
     const PacketLength = buffer.readUInt32BE(0);
     const RequestID = buffer.readUInt32BE(4);
     const SequenceID = buffer.readUInt32BE(8);
@@ -94,8 +111,8 @@ export default class Util {
    * 获取响应消息头
    * @param header
    */
-  encodeHeader(header: IHeader): Buffer {
-    const headerLength = 12;
+  encodeHeader(header: SMGP_IHeader): Buffer {
+    const headerLength = this.HEADER_LENGTH;
     const buffer = Buffer.alloc(headerLength);
     buffer.writeUInt32BE(header.PacketLength, 0);
     buffer.writeUInt32BE(header.RequestID, 4);
@@ -119,7 +136,7 @@ export default class Util {
     if (!commandDesp) return buffer.slice(0, 0);
 
     body.length = 0;
-    commandDesp.forEach((field: IField) => {
+    commandDesp.forEach((field: SMGP_IField) => {
       this.writeBuf(buffer, field, body);
     });
     return buffer.slice(0, body.length);
@@ -131,7 +148,7 @@ export default class Util {
    * @param field  消息头的字段集合
    * @param body {length:string}
    */
-  writeBuf(buffer: Buffer, field: IField, body: Record<string, any>) {
+  writeBuf(buffer: Buffer, field: SMGP_IField, body: Record<string, any>) {
     const length = body.length || 0;
     const fieldLength = this.getLength(field, body);
     let value = body[field.name];
@@ -157,11 +174,12 @@ export default class Util {
    * @param field
    * @param obj Record<string, any>
    */
-  getLength(field: IField, obj: Record<string, any>) {
-    if (lodash.isFunction(field.length)) {
+  getLength(field: SMGP_IField, obj: Record<string, any>) {
+    if (typeof field.length === 'number') {
+      return field.length;
+    } else {
       return field.length(obj);
     }
-    return field.length;
   }
 
   /**
@@ -169,24 +187,20 @@ export default class Util {
    * @param command
    * @param buffer
    */
-  decodeBody(buffer: Buffer, command: Command | keyof IConmmand) {
+  decodeBody(buffer: Buffer, command: Command) {
     const body: any = {};
-    let commandStr: string;
-    if (lodash.isNumber(command)) {
-      commandStr = RequestIdDes[command];
-    } else {
-      commandStr = command;
-    }
-    const commandDesp: IField[] = commandDes[commandStr];
+    const commandStr: string = RequestIdDes[command];
+
+    const commandDesp: SMGP_IField[] = commandDes[commandStr];
     if (!commandDesp) return body;
 
-    commandDesp.forEach((field: IField) => {
-      body[field.name] = this.getValue(buffer, field, body);
+    commandDesp.forEach((field: SMGP_IField) => {
+      body[field.name] = this.decodeValue(buffer, field, body);
     });
 
     if (command === Command.Deliver) {
       if (body.IsReport === 1) {
-        body.MsgContent = this.decodeBody(body.MsgContent, 'Deliver_Report_Cotent');
+        body.MsgContent = this.decodeBody(body.MsgContent, Command.Deliver_Report_Cotent);
       } else {
         switch (body.MsgFormat) {
           case 15: // gb 汉字
@@ -214,15 +228,15 @@ export default class Util {
    * @param field
    * @param obj
    */
-  getValue(buffer: Buffer, field: IField, body) {
+  decodeValue(buffer: Buffer, field: SMGP_IField, body) {
     const length = body.length || 0;
     if (length >= buffer.length) return;
     let fieldLength;
-    lodash.isFunction(field.length) ? (fieldLength = field.length(body)) : (fieldLength = field.length);
+    typeof field.length === 'number' ? (fieldLength = field.length) : (fieldLength = field.length(body));
     body.length = length + fieldLength;
     if (field.type === 'number') {
       const bitLength = fieldLength * 8;
-      let method = `readUInt${bitLength}${bitLength === 8 ? '' : 'BE'}`;
+      const method = `readUInt${bitLength}${bitLength === 8 ? '' : 'BE'}`;
       return buffer[method](length);
     } else if (field.type === 'string') {
       if (field.name === 'MsgContent') {
