@@ -2,7 +2,7 @@ import * as net from 'net';
 import Util from './util';
 import * as iconv from 'iconv-lite';
 const Utils = new Util();
-import { SMGP_IHeader, SMGP_IServerConf, SMGP_ISubmit_Resp, SMGP_ILogin_Resp, SMGP_ILogin, SMGP_ISubmit, SMGP_IDeliver_Resp, SMGP_IDeliver_Report_Cotent } from './interface';
+import { SMGP_IHeader, SMGP_IServerConf, SMGP_ISubmit_Resp, SMGP_ILogin_Resp, SMGP_ILogin, SMGP_ISubmit, SMGP_IDeliver_Resp, SMGP_IDeliver_Report_Content } from './interface';
 import { Command } from './Config';
 import { EventEmitter } from 'events';
 
@@ -72,9 +72,9 @@ export default class SmgpServer extends EventEmitter {
 
     // 服务端发送注册请求
     if (header.RequestID === Command.Login) {
-      const bodyObj: SMGP_ILogin = Utils.decodeBody(buffer.slice(Utils.HEADER_LENGTH), header.RequestID);
+      const bodyObj: SMGP_ILogin = Utils.deCodeBody(buffer.slice(Utils.HEADER_LENGTH), header.RequestID);
       const result = this.LoginRes({ header: header, body: bodyObj });
-      const buf = Utils.encode(
+      const buf = Utils.enCode(
         { SequenceID: header.SequenceID, RequestID: Command.Login_Resp },
         {
           Status: result ? 0 : 21,
@@ -89,7 +89,7 @@ export default class SmgpServer extends EventEmitter {
 
     // 客户端发送Exit请求
     if (header.RequestID === Command.Exit) {
-      const buf = Utils.encode({
+      const buf = Utils.enCode({
         SequenceID: header.SequenceID,
         RequestID: Command.Exit_Resp,
       });
@@ -100,9 +100,9 @@ export default class SmgpServer extends EventEmitter {
 
     // 服务端发送上行或者状态报告
     if (header.RequestID === Command.Submit) {
-      const bodyObj: SMGP_ISubmit = Utils.decodeBody(buffer.slice(Utils.HEADER_LENGTH), header.RequestID);
+      const bodyObj: SMGP_ISubmit = Utils.deCodeBody(buffer.slice(Utils.HEADER_LENGTH), header.RequestID);
       const submitRes = this.SubmitRes({ header: header, body: bodyObj });
-      const buf = Utils.encode({ SequenceID: header.SequenceID, RequestID: Command.Submit_Resp }, submitRes);
+      const buf = Utils.enCode({ SequenceID: header.SequenceID, RequestID: Command.Submit_Resp }, submitRes);
 
       this.socket.write(buf);
 
@@ -111,7 +111,7 @@ export default class SmgpServer extends EventEmitter {
 
     // 信令检测
     if (header.RequestID === Command.Active_Test) {
-      const buf = Utils.encode({
+      const buf = Utils.enCode({
         SequenceID: header.SequenceID,
         RequestID: Command.Active_Test_Resp,
       });
@@ -121,7 +121,7 @@ export default class SmgpServer extends EventEmitter {
 
     //如果消息为除了上行消息和状态报告的响应
     if (header.RequestID === Command.Deliver_Resp) {
-      const bodyObj: SMGP_IDeliver_Resp = Utils.decodeBody(buffer.slice(Utils.HEADER_LENGTH), header.RequestID);
+      const bodyObj: SMGP_IDeliver_Resp = Utils.deCodeBody(buffer.slice(Utils.HEADER_LENGTH), header.RequestID);
       this.DeliverRes({ header: header, body: bodyObj });
       return;
     }
@@ -136,7 +136,7 @@ export default class SmgpServer extends EventEmitter {
   fetchData(data: { header: SMGP_IHeader; buffer: Buffer }) {
     if (this.bufferCache.length < Utils.HEADER_LENGTH) return false;
 
-    data.header = Utils.decodeHeader(this.bufferCache);
+    data.header = Utils.deCodeHeader(this.bufferCache);
     if (this.bufferCache.length < data.header.PacketLength) return false;
 
     data.buffer = this.bufferCache.slice(0, data.header.PacketLength);
@@ -149,7 +149,7 @@ export default class SmgpServer extends EventEmitter {
    * 发送上行或者状态报告
    * @param body
    */
-  deliver(body: { MsgID: string; IsReport: boolean; SrcTermID: string; DestTermID: string; Content: string | SMGP_IDeliver_Report_Cotent }) {
+  deliver(body: { MsgID: string; IsReport: boolean; SrcTermID: string; DestTermID: string; Content: string | SMGP_IDeliver_Report_Content }) {
     const { MsgID, IsReport, SrcTermID, DestTermID, Content } = body;
     let MsgContentStr;
     let MsgContent;
@@ -157,10 +157,10 @@ export default class SmgpServer extends EventEmitter {
       MsgContentStr = iconv.encode(Content, 'GB18030');
       MsgContent = Buffer.from(MsgContentStr);
     } else {
-      MsgContent = Utils.encodeBody(Command.Deliver_Report_Cotent, Content);
+      MsgContent = Utils.enCodeBody(Command.Deliver_Report_Content, Content);
     }
 
-    const buf = Utils.encode({ SequenceID: Utils.getSequenceId(), RequestID: Command.Deliver }, { MsgID, IsReport: IsReport ? 1 : 0, MsgFormat: 15, RecvTime: '', SrcTermID, DestTermID, MsgLength: MsgContent.length, MsgContent, Reserve: '' });
+    const buf = Utils.enCode({ SequenceID: Utils.getSequenceId(), RequestID: Command.Deliver }, { MsgID, IsReport: IsReport ? 1 : 0, MsgFormat: 15, RecvTime: '', SrcTermID, DestTermID, MsgLength: MsgContent.length, MsgContent, Reserve: '' });
     this.socket.write(buf);
   }
 }

@@ -13,7 +13,7 @@ export interface SMGP_IConfig {
   mobilesPerSecond?: number;
   heartbeatTimeout?: number;
 }
-export interface SMGP_IConmmand {
+export interface SMGP_ICommand {
   Login?: number;
   Login_Resp?: number;
   Submit?: number;
@@ -30,7 +30,7 @@ export interface SMGP_IConmmand {
   Query_Resp?: number;
   Query_TE_Route?: number;
   Query_TE_Route_Resp?: number;
-  Deliver_Report_Cotent?: number;
+  Deliver_Report_Content?: number;
 }
 
 export interface SMGP_IRequestId {
@@ -144,11 +144,11 @@ export interface SMGP_IDeliver {
   SrcTermID: string;
   DestTermID: string;
   MsgLength: number;
-  MsgContent: string | SMGP_IDeliver_Report_Cotent;
+  MsgContent: string | SMGP_IDeliver_Report_Content;
   Reserve: string;
 }
 
-export interface SMGP_IDeliver_Report_Cotent {
+export interface SMGP_IDeliver_Report_Content {
   MsgID: string;
   sub: string;
   Dlvrd: string;
@@ -169,5 +169,5 @@ export interface SMGP_IServerConf {
   LoginRes: (loginResMsg: { header: SMGP_IHeader; body: SMGP_ILogin }) => SMGP_ILogin_Resp;
   SubmitRes: (submitResMsg: { header: SMGP_IHeader; body: SMGP_ISubmit }) => SMGP_ISubmit_Resp;
   DeliverRes: (deliverResMsg: { header: SMGP_IHeader; body: SMGP_IDeliver_Resp }) => void;
-  // Deliver: (deliverMsg: { header: IHeader; body: IDeliver | IDeliver_Report_Cotent }) => void;
+  // Deliver: (deliverMsg: { header: IHeader; body: IDeliver | IDeliver_Report_Content }) => void;
 }

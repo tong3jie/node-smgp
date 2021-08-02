@@ -29,9 +29,9 @@ client.on('error', error => {
 });
 
 client.on('exit', () => {
-  console.log('sockt was exit');
+  console.log('socket was exit');
 });
 
 client.on('connect', () => {
-  console.log('sockt was connected');
+  console.log('socket was connected');
 });

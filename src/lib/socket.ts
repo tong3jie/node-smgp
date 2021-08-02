@@ -1,12 +1,9 @@
 import * as net from 'net';
-import * as util from 'util';
 import * as iconv from 'iconv-lite';
 import Util from './util';
 const Utils = new Util();
 import * as sleep from 'sleep-promise';
 import { EventEmitter } from 'events';
-import * as debug from 'debug';
-const socketDebug = debug('socket');
 import { SMGP_IConfig, SMGP_IRequestId, SMGP_IHeader, SMGP_IResBody, SMGP_IReqBody } from './interface';
 import { defConfig, Command, RequestIdDes, Errors } from './Config';
 
@@ -21,7 +18,7 @@ export default class Socket extends EventEmitter {
   private heartbeatAttempts: number; //心跳次数
   private heartbeatMaxAttempts: number;
   private heartbeatHandle: NodeJS.Timeout;
-  private bufferCache: Buffer;
+  private bufferCache = Buffer.alloc(0);
   private HEADER_LENGTH: number;
   private socket: net.Socket;
   private sequenceMap: Map<string, Record<string, any>>;
@@ -50,7 +47,6 @@ export default class Socket extends EventEmitter {
   handleHeartbeat() {
     if (this.isReady) {
       this.heartbeatAttempts++;
-      socketDebug(`heart beat attempts ${this.heartbeatAttempts}`);
       if (this.heartbeatAttempts > this.heartbeatMaxAttempts) {
         this.disconnect();
         this.emit('exit', 'heartbeat exit');
@@ -86,6 +82,7 @@ export default class Socket extends EventEmitter {
     this.isReady = true;
     const TimeStamp = Utils.TimeStamp();
     const AuthenticatorClient = Utils.getSmgpAuthenticator(this.clientID, this.secret, TimeStamp);
+    // 发送鉴权信息
     this.send(Command.Login, {
       ClientID: this.clientID,
       AuthenticatorClient,
@@ -104,14 +101,9 @@ export default class Socket extends EventEmitter {
     if (this.isReady) return Promise.resolve();
     if (this.socket) return Promise.resolve();
     this.socket = new net.Socket();
-    this.bufferCache = Buffer.alloc(0);
 
     this.socket.on('data', buffer => {
-      if (!this.bufferCache) {
-        this.bufferCache = buffer;
-      } else {
-        this.bufferCache = Buffer.concat([this.bufferCache, buffer]);
-      }
+      this.bufferCache = Buffer.concat([this.bufferCache, buffer]);
       const data = { header: undefined, buffer: undefined };
       while (this.fetchData(data)) {
         this.handleBuffer(data.buffer, data.header);
@@ -152,8 +144,7 @@ export default class Socket extends EventEmitter {
   async send(command: keyof SMGP_IRequestId, body?) {
     // if (this.sequenceMap.size > 16) return this.emit('error', '下发速度太快！');
     const SequenceID = Utils.getSequenceId();
-    const buf = Utils.encode({ SequenceID, RequestID: command }, body);
-    socketDebug(`${command} send buffer: ${util.inspect(buf)}`);
+    const buf = Utils.enCode({ SequenceID, RequestID: command }, body);
     this.socket.write(buf);
     if (command === Command.Submit) {
       this.pushPromise({ SequenceID, RequestID: command }, body);
@@ -166,7 +157,7 @@ export default class Socket extends EventEmitter {
    * @param header
    */
   async handleBuffer(buffer: Buffer, header: SMGP_IHeader) {
-    const bodyObj: SMGP_IReqBody & SMGP_IResBody = Utils.decodeBody(buffer.slice(this.HEADER_LENGTH), header.RequestID);
+    const bodyObj: SMGP_IReqBody & SMGP_IResBody = Utils.deCodeBody(buffer.slice(this.HEADER_LENGTH), header.RequestID);
 
     // 服务端返回login请求
     if (header.RequestID === Command.Login_Resp) {
@@ -230,8 +221,7 @@ export default class Socket extends EventEmitter {
    * @param body
    */
   sendResponse(command: number, sequence: number, ResBody?: SMGP_IResBody) {
-    const buf = Utils.encode({ SequenceID: sequence, RequestID: command }, ResBody);
-    socketDebug('%s send buffer:', command, util.inspect(buf));
+    const buf = Utils.enCode({ SequenceID: sequence, RequestID: command }, ResBody);
     this.socket.write(buf);
   }
 
@@ -239,7 +229,6 @@ export default class Socket extends EventEmitter {
    * 连接销毁
    */
   destroySocket() {
-    socketDebug('destroy Socket');
     this.isReady = false;
     if (this.socket) {
       this.socket.end();
@@ -307,7 +296,7 @@ export default class Socket extends EventEmitter {
       UdhiBuf.writeInt8(5, 0);
       UdhiBuf.writeInt8(0, 1);
       UdhiBuf.writeInt8(3, 2);
-      UdhiBuf.writeInt8(Utils.getlongSmsNo(), 3);
+      UdhiBuf.writeInt8(Utils.getLongSmsNo(), 3);
       UdhiBuf.writeInt8(PkTotal, 4);
       new Array(PkTotal).fill(0).forEach((item, index) => {
         UdhiBuf.writeInt8(index + 1, 5);
@@ -322,12 +311,12 @@ export default class Socket extends EventEmitter {
   /**
    * 获取数据状态，如果数据超过包头长度，则读取包头中包含的包体的长度
    * @param data
-   * @returns bollen
+   * @returns Bollen
    */
   fetchData(data: { header: SMGP_IHeader; buffer: Buffer }) {
     if (this.bufferCache.length < Utils.HEADER_LENGTH) return false;
 
-    data.header = Utils.decodeHeader(this.bufferCache);
+    data.header = Utils.deCodeHeader(this.bufferCache);
     if (this.bufferCache.length < data.header.PacketLength) return false;
 
     data.buffer = this.bufferCache.slice(0, data.header.PacketLength);

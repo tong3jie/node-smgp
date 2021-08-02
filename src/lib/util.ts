@@ -29,7 +29,7 @@ export default class Util {
   }
 
   /**
-   * 时间戳
+   * 获取时间戳
    * @returns string
    */
   TimeStamp = () => {
@@ -54,7 +54,6 @@ export default class Util {
    */
   getSmgpAuthenticator(ClientID: string, secret: string, timeStamp: string): string {
     const buffers = [];
-    console.log('ClientID', ClientID);
     buffers.push(Buffer.from(ClientID));
     buffers.push(Buffer.alloc(7, 0));
     buffers.push(Buffer.from(secret));
@@ -64,54 +63,26 @@ export default class Util {
   }
 
   /**
-   * smgp鉴权加密
-   * @param ClientID
-   * @param secret
-   * @param timestamp
-   * @returns
-   */
-  getCmppAuthenticator(Source_Addr: string, secret: string, timeStamp: string): string {
-    const buffers = [];
-    buffers.push(Buffer.from(Source_Addr));
-    buffers.push(Buffer.alloc(9, 0));
-    buffers.push(Buffer.from(secret));
-    buffers.push(Buffer.from(timeStamp));
-    const buffer = Buffer.concat(buffers);
-    return this.MD5(buffer);
-  }
-
-  /**
-   * 获取发送的内容(JSON转Buffer)
+   * 编码
    * @param header
    * @param body
    */
-  encode(header: SMGP_IHeader, body?: SMGP_IReqBody | SMGP_IResBody) {
+  enCode(header: SMGP_IHeader, body?: SMGP_IReqBody | SMGP_IResBody) {
     header.PacketLength = this.HEADER_LENGTH;
     let bodyBuf: Buffer;
     if (body) {
-      bodyBuf = this.encodeBody(header.RequestID, body);
+      bodyBuf = this.enCodeBody(header.RequestID, body);
       header.PacketLength += bodyBuf.length;
     }
-    const headBuf: Buffer = this.encodeHeader(header);
+    const headBuf: Buffer = this.enCodeHeader(header);
     return bodyBuf ? Buffer.concat([headBuf, bodyBuf]) : headBuf;
   }
 
   /**
-   * 格式化响应消息头
-   * @param buffer
-   */
-  decodeHeader(buffer: Buffer): SMGP_IHeader {
-    const PacketLength = buffer.readUInt32BE(0);
-    const RequestID = buffer.readUInt32BE(4);
-    const SequenceID = buffer.readUInt32BE(8);
-    return { PacketLength, RequestID, SequenceID };
-  }
-
-  /**
-   * 获取响应消息头
+   * 编码消息头
    * @param header
    */
-  encodeHeader(header: SMGP_IHeader): Buffer {
+  enCodeHeader(header: SMGP_IHeader): Buffer {
     const headerLength = this.HEADER_LENGTH;
     const buffer = Buffer.alloc(headerLength);
     buffer.writeUInt32BE(header.PacketLength, 0);
@@ -121,12 +92,12 @@ export default class Util {
   }
 
   /**
-   * 发送消息时，获取Body的Buffer，JSON转Buffer
+   * 编码消息体
    * @param command  消息类型
    * @param body  消息体:JSON
    * @returns Buffer
    */
-  encodeBody(command: Command, body: Record<string, any>) {
+  enCodeBody(command: Command, body: Record<string, any>) {
     const buffer = Buffer.alloc(1024 * 1024, 0);
     //根据指令获取指令含义
     const commandStr = RequestIdDes[command];
@@ -137,18 +108,18 @@ export default class Util {
 
     body.length = 0;
     commandDesp.forEach((field: SMGP_IField) => {
-      this.writeBuf(buffer, field, body);
+      this.enCodeValue(buffer, field, body);
     });
     return buffer.slice(0, body.length);
   }
 
   /**
-   * 组装消息
+   * 编码消息体各个字段
    * @param buffer
    * @param field  消息头的字段集合
    * @param body {length:string}
    */
-  writeBuf(buffer: Buffer, field: SMGP_IField, body: Record<string, any>) {
+  enCodeValue(buffer: Buffer, field: SMGP_IField, body: Record<string, any>) {
     const length = body.length || 0;
     const fieldLength = this.getLength(field, body);
     let value = body[field.name];
@@ -170,24 +141,22 @@ export default class Util {
   }
 
   /**
-   * 当字段为消息内容的时候，先获取下发内容和上行内容的长度
-   * @param field
-   * @param obj Record<string, any>
+   * 解码消息头
+   * @param buffer
    */
-  getLength(field: SMGP_IField, obj: Record<string, any>) {
-    if (typeof field.length === 'number') {
-      return field.length;
-    } else {
-      return field.length(obj);
-    }
+  deCodeHeader(buffer: Buffer): SMGP_IHeader {
+    const PacketLength = buffer.readUInt32BE(0);
+    const RequestID = buffer.readUInt32BE(4);
+    const SequenceID = buffer.readUInt32BE(8);
+    return { PacketLength, RequestID, SequenceID };
   }
 
   /**
-   * 读取网关返回的消息体格式
+   * 解码消息体
    * @param command
    * @param buffer
    */
-  decodeBody(buffer: Buffer, command: Command) {
+  deCodeBody(buffer: Buffer, command: Command) {
     const body: any = {};
     const commandStr: string = RequestIdDes[command];
 
@@ -195,12 +164,12 @@ export default class Util {
     if (!commandDesp) return body;
 
     commandDesp.forEach((field: SMGP_IField) => {
-      body[field.name] = this.decodeValue(buffer, field, body);
+      body[field.name] = this.deCodeValue(buffer, field, body);
     });
 
     if (command === Command.Deliver) {
       if (body.IsReport === 1) {
-        body.MsgContent = this.decodeBody(body.MsgContent, Command.Deliver_Report_Cotent);
+        body.MsgContent = this.deCodeBody(body.MsgContent, Command.Deliver_Report_Content);
       } else {
         switch (body.MsgFormat) {
           case 15: // gb 汉字
@@ -223,12 +192,12 @@ export default class Util {
   }
 
   /**
-   * 获取消息体各个字段的值
+   * 解码消息体各个字段的值
    * @param buffer
    * @param field
    * @param obj
    */
-  decodeValue(buffer: Buffer, field: SMGP_IField, body) {
+  deCodeValue(buffer: Buffer, field: SMGP_IField, body) {
     const length = body.length || 0;
     if (length >= buffer.length) return;
     let fieldLength;
@@ -254,6 +223,23 @@ export default class Util {
     }
   }
 
+  /**
+   * 当字段为消息内容的时候，先获取下发内容和上行内容的长度
+   * @param field
+   * @param obj Record<string, any>
+   */
+  getLength(field: SMGP_IField, obj: Record<string, any>) {
+    if (typeof field.length === 'number') {
+      return field.length;
+    } else {
+      return field.length(obj);
+    }
+  }
+
+  /**
+   * 获取默认的消息字段内容
+   * @param lang boolean
+   */
   getDefBody(lang: boolean) {
     if (lang === false) {
       return {
@@ -306,7 +292,7 @@ export default class Util {
    * 长短信包头标识
    * @returns
    */
-  getlongSmsNo() {
+  getLongSmsNo() {
     return this.longSmsNo >= 127 ? 1 : this.longSmsNo++;
   }
 }
