@@ -1,6 +1,5 @@
 import * as dayjs from 'dayjs';
 import * as crypto from 'crypto';
-import * as lodash from 'lodash';
 import * as iconv from 'iconv-lite';
 import { SMGP_IHeader, SMGP_IField, SMGP_IReqBody, SMGP_IResBody } from './interface';
 import { Command, RequestIdDes, commandDes } from './Config';
@@ -127,7 +126,7 @@ export default class Util {
     if (value instanceof Buffer) {
       value.copy(buffer, length, 0, fieldLength);
     } else {
-      if (field.type === 'number' && lodash.isNumber(value)) {
+      if (field.type === 'number' && typeof value === 'number') {
         const bitLength = fieldLength * 8;
         // let method = 'writeUInt' + bitLength + 'BE';
         // if (bitLength === 8) method = 'writeUInt' + bitLength;
